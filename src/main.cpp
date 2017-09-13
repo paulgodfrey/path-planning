@@ -270,14 +270,17 @@ int main() {
               vehicle_s += ((double)prev_size*.02*vehicle_speed);
 
               // add vehicles in close proximity to relative lane vectors
-              if((vehicle_s > car_s - 45) && ((vehicle_s - car_s) < 45)) {
-                // ignore vehicles behind our car in current lane
+              if((vehicle_s > car_s - 35) && ((vehicle_s - car_s) < 45)) {
+                // check if vehicle is in current land and ahead of our car
                 if((vehicle_s > car_s) && (vehicle_d < (2+4*lane+2)) && (vehicle_d > (2+4*lane-2))) {
                   lane_current.push_back(vehicle);
-                } else if (vehicle_d < (2+4*(lane-1)+2) && vehicle_d > (2+4*(lane-1)-2)) {
-                  lane_left.push_back(vehicle);
-                } else if (vehicle_d < (2+4*(lane+1)+2) && vehicle_d > (2+4*(lane+1)-2)){
-                  lane_right.push_back(vehicle);
+                // check if vehicle is near our car in neighboring lanes
+                } else if((vehicle_s - car_s) < 20) {
+                  if (vehicle_d < (2+4*(lane-1)+2) && vehicle_d > (2+4*(lane-1)-2)) {
+                    lane_left.push_back(vehicle);
+                  } else if (vehicle_d < (2+4*(lane+1)+2) && vehicle_d > (2+4*(lane+1)-2)){
+                    lane_right.push_back(vehicle);
+                  }
                 }
               }
 
