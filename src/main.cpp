@@ -203,7 +203,7 @@ int main() {
 
   // current lane [0,1,2] as [left,center,right]
   int lane = 1;
-  double ref_vel = 49.5;
+  double ref_vel = 0.0;
 
   h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
@@ -247,6 +247,43 @@ int main() {
             // length of previous path
             int prev_size = previous_path_x.size();
 
+            bool accelerate = true;
+
+            // car state [ 0 = keep lane, 1 = prepare lane shift, 2 = lane shift left, 3 = lane shift right]
+            int car_state = 0;
+
+            for(int i = 0; i < sensor_fusion.size(); i++) {
+              // cout << sensor_fusion[i];
+              auto vehicle = sensor_fusion[i];
+              double vehicle_d = vehicle[6];
+
+              if(vehicle_d < (2+4*lane+2) && vehicle_d > (2+4*lane-2)) {
+                double vehicle_vx = vehicle[3];
+                double vehicle_vy = vehicle[4];
+                double vehicle_s = vehicle[5];
+                double vehicle_d = vehicle[6];
+
+                double vehicle_speed = sqrt(vehicle_vx*vehicle_vx+vehicle_vy*vehicle_vy);
+
+                vehicle_s += ((double)prev_size*.02*vehicle_speed);
+
+                if((vehicle_s > car_s) && ((vehicle_s - car_s) < 45)) {
+                  accelerate = false;
+                  car_state = 1;
+                  cout << "car in path!! speed is " << vehicle_speed;
+                }
+
+              }
+            }
+
+            double target_vel = ((accelerate) ? 47.5 : 29.5);
+
+
+            if(car_speed < target_vel) {
+              ref_vel += .225;
+            } else {
+              ref_vel -= .225;
+            }
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
             double dist_inc = 0.3;
@@ -256,19 +293,6 @@ int main() {
             // The jerk is calculated as the average acceleration over 1 second intervals. In order for the passenger to have an enjoyable ride both the jerk and the total acceleration should not exceed 10.
 
             // The simulator runs a cycle every 20 ms (50 frames per second), but your C++ path planning program will provide new a new path at least one 20 ms cycle behind
-           
-            /*
-            for(int i = 0; i < 50; i++)
-            {
-                  double next_s = car_s+(i+1)*dist_inc;
-                  double next_d = 6;
-
-                  vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-
-                  next_x_vals.push_back(xy[0]);
-                  next_y_vals.push_back(xy[1]);
-            }
-            */
 
             std::cout << "\ndebug: 1";
 
@@ -357,9 +381,6 @@ int main() {
 
             std::cout << "\ndebug: 3";
 
-            //std::cout << ptsx;
-            //std::cout << ptsy;
-
             tk::spline s;
 
             std::cout << "\ndebug: 3.3";
@@ -391,8 +412,6 @@ int main() {
             // here we'll always fill it up to 50 points
 
             for(int i = 1; i <= 50 - previous_path_x.size(); i++) {
-              //std::cout << "\nfrozen loop: " << i;
-
               double N = (target_dist/(.02*ref_vel/2.24)); //2.24 is for mph to m/s coversion
               double x_point = x_add_on + (target_x) / N;
               double y_point = s(x_point);
