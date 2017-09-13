@@ -252,29 +252,52 @@ int main() {
             // car state [ 0 = keep lane, 1 = prepare lane shift, 2 = lane shift left, 3 = lane shift right]
             int car_state = 0;
 
+            vector<vector<double>> lane_left;
+            vector<vector<double>> lane_right;
+            vector<vector<double>> lane_current;
+
             for(int i = 0; i < sensor_fusion.size(); i++) {
               // cout << sensor_fusion[i];
               auto vehicle = sensor_fusion[i];
+
+              double vehicle_vx = vehicle[3];
+              double vehicle_vy = vehicle[4];
+              double vehicle_s = vehicle[5];
               double vehicle_d = vehicle[6];
 
-              if(vehicle_d < (2+4*lane+2) && vehicle_d > (2+4*lane-2)) {
-                double vehicle_vx = vehicle[3];
-                double vehicle_vy = vehicle[4];
-                double vehicle_s = vehicle[5];
-                double vehicle_d = vehicle[6];
+              double vehicle_speed = sqrt(vehicle_vx*vehicle_vx+vehicle_vy*vehicle_vy);
 
-                double vehicle_speed = sqrt(vehicle_vx*vehicle_vx+vehicle_vy*vehicle_vy);
+              vehicle_s += ((double)prev_size*.02*vehicle_speed);
 
-                vehicle_s += ((double)prev_size*.02*vehicle_speed);
-
-                if((vehicle_s > car_s) && ((vehicle_s - car_s) < 45)) {
-                  accelerate = false;
-                  car_state = 1;
-                  cout << "car in path!! speed is " << vehicle_speed;
+              // add vehicles in close proximity to relative lane vectors
+              if((vehicle_s > car_s - 45) && ((vehicle_s - car_s) < 45)) {
+                // ignore vehicles behind our car in current lane
+                if((vehicle_s > car_s) && (vehicle_d < (2+4*lane+2)) && (vehicle_d > (2+4*lane-2))) {
+                  lane_current.push_back(vehicle);
+                } else if (vehicle_d < (2+4*(lane-1)+2) && vehicle_d > (2+4*(lane-1)-2)) {
+                  lane_left.push_back(vehicle);
+                } else if (vehicle_d < (2+4*(lane+1)+2) && vehicle_d > (2+4*(lane+1)-2)){
+                  lane_right.push_back(vehicle);
                 }
-
               }
+
+              if(lane_current.size() > 0) {
+                accelerate = false;
+                car_state = 1;
+                // cout << "car in path!! speed is " << vehicle_speed;
+
+                if(lane > 0 && lane_left.size() == 0) {
+                  lane -= 1;
+                } else if(lane < 2 && lane_right.size() == 0) {
+                  lane += 1;
+                }
+              }
+
             }
+
+            cout << "\nlane_left size: " << lane_left.size();
+            cout << "\nlane_right size: " << lane_right.size();
+            cout << "\nlane_current size: " << lane_current.size();
 
             double target_vel = ((accelerate) ? 47.5 : 29.5);
 
@@ -294,7 +317,7 @@ int main() {
 
             // The simulator runs a cycle every 20 ms (50 frames per second), but your C++ path planning program will provide new a new path at least one 20 ms cycle behind
 
-            std::cout << "\ndebug: 1";
+            // std::cout << "\ndebug: 1";
 
             /*
             std::cout << "\ncar_x" << car_x;
@@ -311,7 +334,7 @@ int main() {
             std::cout << "\ntarget speed" << ((50 * dist_inc)*60*60)/1609.34;
             */
 
-            std::cout << "\ncar_location [" << car_x << ", " << car_y << "]";
+            // std::cout << "\ncar_location [" << car_x << ", " << car_y << "]";
 
             vector<double> ptsx;
             vector<double> ptsy;
@@ -320,11 +343,11 @@ int main() {
             double ref_y = car_y;
             double ref_yaw = deg2rad(car_yaw);
 
-            std::cout << "\ndebug: 1.2" << "\nprevious size: " << prev_size;
+            // std::cout << "\ndebug: 1.2" << "\nprevious size: " << prev_size;
 
             if(prev_size < 2) {
               // make path tangent to car
-              std::cout << "\ndebug: 1.3 create from exising loc";
+              // std::cout << "\ndebug: 1.3 create from exising loc";
               double prev_car_x = car_x - cos(car_yaw);
               double prev_car_y = car_y - sin(car_yaw);
 
@@ -335,7 +358,7 @@ int main() {
               ptsy.push_back(car_y);
             } else {
               // redefine ref state as previous end point
-              std::cout << "\ndebug: 1.3 use end of previous path as starting point";
+              // std::cout << "\ndebug: 1.3 use end of previous path as starting point";
               ref_x = previous_path_x[prev_size-1];
               ref_y = previous_path_y[prev_size-1];
 
@@ -352,10 +375,10 @@ int main() {
 
             }
 
-            cout << "\npath [" << ptsx[0] << ", " << ptsy[0] << "]";
-            cout << "\npath [" << ptsx[1] << ", " << ptsy[1] << "]";
+            // cout << "\npath [" << ptsx[0] << ", " << ptsy[0] << "]";
+            // cout << "\npath [" << ptsx[1] << ", " << ptsy[1] << "]";
 
-            std::cout << "\ndebug: 2";
+            // std::cout << "\ndebug: 2";
 
             vector<double> next_wp0 = getXY(car_s+30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
             vector<double> next_wp1 = getXY(car_s+60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -376,18 +399,18 @@ int main() {
 
               ptsx[i] = (shift_x * cos(0-ref_yaw) - shift_y * sin(0-ref_yaw));
               ptsy[i] = (shift_x * sin(0-ref_yaw) + shift_y * cos(0-ref_yaw));
-              cout << "\npath [" << ptsx[i] << ", " << ptsy[i] << "]";
+              // cout << "\npath [" << ptsx[i] << ", " << ptsy[i] << "]";
             }
 
-            std::cout << "\ndebug: 3";
+            // std::cout << "\ndebug: 3";
 
             tk::spline s;
 
-            std::cout << "\ndebug: 3.3";
+            // std::cout << "\ndebug: 3.3";
             // set (x,y) points to the spline
             s.set_points(ptsx, ptsy);
 
-            std::cout << "\ndebug: 3.5";
+            // std::cout << "\ndebug: 3.5";
 
             // define (x,y) points we'll use with planner
             vector<double> next_x_vals;
@@ -406,7 +429,7 @@ int main() {
 
             double x_add_on = 0;
 
-            std::cout << "\ndebug: 4";
+            // std::cout << "\ndebug: 4";
 
             // fill up the rest of our path planner after filling with previous points
             // here we'll always fill it up to 50 points
@@ -437,7 +460,7 @@ int main() {
             msgJson["next_x"] = next_x_vals;
             msgJson["next_y"] = next_y_vals;
 
-            std::cout << "\ndebug: 5";
+            // std::cout << "\ndebug: 5";
 
             auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
