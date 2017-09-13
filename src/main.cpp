@@ -1,5 +1,6 @@
 #include <fstream>
 #include <math.h>
+#include "spline.h"
 #include <uWS/uWS.h>
 #include <chrono>
 #include <iostream>
@@ -34,10 +35,13 @@ string hasData(string s) {
   return "";
 }
 
+// calculate euclidian distance between two points
 double distance(double x1, double y1, double x2, double y2)
 {
 	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
+
+// get closest waypoint to vehicle (even if it's behind vehicle)
 int ClosestWaypoint(double x, double y, vector<double> maps_x, vector<double> maps_y)
 {
 
@@ -61,6 +65,7 @@ int ClosestWaypoint(double x, double y, vector<double> maps_x, vector<double> ma
 
 }
 
+// get location of next waypoint if traveling in current direction
 int NextWaypoint(double x, double y, double theta, vector<double> maps_x, vector<double> maps_y)
 {
 
@@ -196,7 +201,11 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  // current lane [0,1,2] as [left,center,right]
+  int lane = 1;
+  double ref_vel = 49.5;
+
+  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -209,12 +218,12 @@ int main() {
 
       if (s != "") {
         auto j = json::parse(s);
-        
+
         string event = j[0].get<string>();
-        
+
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          
+
         	// Main car's localization Data
           	double car_x = j[1]["x"];
           	double car_y = j[1]["y"];
@@ -226,28 +235,196 @@ int main() {
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
-          	// Previous path's end s and d values 
+          	// Previous path's end s and d values
           	double end_path_s = j[1]["end_path_s"];
           	double end_path_d = j[1]["end_path_d"];
 
           	// Sensor Fusion Data, a list of all other cars on the same side of the road.
           	auto sensor_fusion = j[1]["sensor_fusion"];
 
-          	json msgJson;
+            // ["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates.
 
-          	vector<double> next_x_vals;
-          	vector<double> next_y_vals;
+            // length of previous path
+            int prev_size = previous_path_x.size();
 
 
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-          	msgJson["next_x"] = next_x_vals;
-          	msgJson["next_y"] = next_y_vals;
+            double dist_inc = 0.3;
 
-          	auto msg = "42[\"control\","+ msgJson.dump()+"]";
+            // Acceleration is calculated by comparing the rate of change of average speed over .2 second intervals
 
-          	//this_thread::sleep_for(chrono::milliseconds(1000));
+            // The jerk is calculated as the average acceleration over 1 second intervals. In order for the passenger to have an enjoyable ride both the jerk and the total acceleration should not exceed 10.
+
+            // The simulator runs a cycle every 20 ms (50 frames per second), but your C++ path planning program will provide new a new path at least one 20 ms cycle behind
+           
+            /*
+            for(int i = 0; i < 50; i++)
+            {
+                  double next_s = car_s+(i+1)*dist_inc;
+                  double next_d = 6;
+
+                  vector<double> xy = getXY(next_s, next_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+                  next_x_vals.push_back(xy[0]);
+                  next_y_vals.push_back(xy[1]);
+            }
+            */
+
+            std::cout << "\ndebug: 1";
+
+            /*
+            std::cout << "\ncar_x" << car_x;
+          	std::cout << "\ncar_y" << car_y;
+          	std::cout << "\ncar_s" << car_s;
+          	std::cout << "\ncar_d" << car_d;
+          	std::cout << "\ncar_yaw" << car_yaw;
+          	std::cout << "\ncar_speed" << car_speed;
+
+            std::cout << "\ncurrent speed" << car_speed;
+            std::cout << "\ntarget speed" << ((50 * dist_inc)*60*60)/1609.34;
+
+            // std::cout << "\nsensor_fusion" << sensor_fusion;
+            std::cout << "\ntarget speed" << ((50 * dist_inc)*60*60)/1609.34;
+            */
+
+            std::cout << "\ncar_location [" << car_x << ", " << car_y << "]";
+
+            vector<double> ptsx;
+            vector<double> ptsy;
+
+            double ref_x = car_x;
+            double ref_y = car_y;
+            double ref_yaw = deg2rad(car_yaw);
+
+            std::cout << "\ndebug: 1.2" << "\nprevious size: " << prev_size;
+
+            if(prev_size < 2) {
+              // make path tangent to car
+              std::cout << "\ndebug: 1.3 create from exising loc";
+              double prev_car_x = car_x - cos(car_yaw);
+              double prev_car_y = car_y - sin(car_yaw);
+
+              //ptsx.push_back(prev_car_x);
+              ptsx.push_back(car_x);
+
+              //ptsy.push_back(prev_car_y);
+              ptsy.push_back(car_y);
+            } else {
+              // redefine ref state as previous end point
+              std::cout << "\ndebug: 1.3 use end of previous path as starting point";
+              ref_x = previous_path_x[prev_size-1];
+              ref_y = previous_path_y[prev_size-1];
+
+              double ref_x_prev = previous_path_x[prev_size-2];
+              double ref_y_prev = previous_path_y[prev_size-2];
+
+              ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
+
+              ptsx.push_back(ref_x_prev);
+              ptsx.push_back(ref_x);
+
+              ptsy.push_back(ref_y_prev);
+              ptsy.push_back(ref_y);
+
+            }
+
+            cout << "\npath [" << ptsx[0] << ", " << ptsy[0] << "]";
+            cout << "\npath [" << ptsx[1] << ", " << ptsy[1] << "]";
+
+            std::cout << "\ndebug: 2";
+
+            vector<double> next_wp0 = getXY(car_s+30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp1 = getXY(car_s+60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp2 = getXY(car_s+90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+            ptsx.push_back(next_wp0[0]);
+            ptsx.push_back(next_wp1[0]);
+            ptsx.push_back(next_wp2[0]);
+
+            ptsy.push_back(next_wp0[1]);
+            ptsy.push_back(next_wp1[1]);
+            ptsy.push_back(next_wp2[1]);
+
+            for(int i = 0; i < ptsx.size(); i++ ) {
+              // shift car reference angle to zero degs
+              double shift_x = ptsx[i]-ref_x;
+              double shift_y = ptsy[i]-ref_y;
+
+              ptsx[i] = (shift_x * cos(0-ref_yaw) - shift_y * sin(0-ref_yaw));
+              ptsy[i] = (shift_x * sin(0-ref_yaw) + shift_y * cos(0-ref_yaw));
+              cout << "\npath [" << ptsx[i] << ", " << ptsy[i] << "]";
+            }
+
+            std::cout << "\ndebug: 3";
+
+            //std::cout << ptsx;
+            //std::cout << ptsy;
+
+            tk::spline s;
+
+            std::cout << "\ndebug: 3.3";
+            // set (x,y) points to the spline
+            s.set_points(ptsx, ptsy);
+
+            std::cout << "\ndebug: 3.5";
+
+            // define (x,y) points we'll use with planner
+            vector<double> next_x_vals;
+            vector<double> next_y_vals;
+
+            // start with all of hte previous points from last time
+            for(int i = 0; i < previous_path_x.size(); i++) {
+              next_x_vals.push_back(previous_path_x[i]);
+              next_y_vals.push_back(previous_path_y[i]);
+            }
+
+            // calc how to break up split points so we travel at desired velocity
+            double target_x = 30.0;
+            double target_y = s(target_x);
+            double target_dist = sqrt((target_x)*(target_x)+(target_y)*(target_y));
+
+            double x_add_on = 0;
+
+            std::cout << "\ndebug: 4";
+
+            // fill up the rest of our path planner after filling with previous points
+            // here we'll always fill it up to 50 points
+
+            for(int i = 1; i <= 50 - previous_path_x.size(); i++) {
+              //std::cout << "\nfrozen loop: " << i;
+
+              double N = (target_dist/(.02*ref_vel/2.24)); //2.24 is for mph to m/s coversion
+              double x_point = x_add_on + (target_x) / N;
+              double y_point = s(x_point);
+
+              x_add_on = x_point;
+
+              double x_ref = x_point;
+              double y_ref = y_point;
+
+              // rotate back to normal after rotating earlier
+              x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
+              y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
+
+              x_point += ref_x;
+              y_point += ref_y;
+
+              next_x_vals.push_back(x_point);
+              next_y_vals.push_back(y_point);
+            }
+
+            json msgJson;
+
+            msgJson["next_x"] = next_x_vals;
+            msgJson["next_y"] = next_y_vals;
+
+            std::cout << "\ndebug: 5";
+
+            auto msg = "42[\"control\","+ msgJson.dump()+"]";
+
+            //this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-          
+
         }
       } else {
         // Manual driving
@@ -290,83 +467,3 @@ int main() {
   }
   h.run();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
