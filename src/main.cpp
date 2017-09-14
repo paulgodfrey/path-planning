@@ -259,6 +259,7 @@ int main() {
             for(int i = 0; i < sensor_fusion.size(); i++) {
               // cout << sensor_fusion[i];
               auto vehicle = sensor_fusion[i];
+              vector<double> vehicle_trajectory;
 
               double vehicle_vx = vehicle[3];
               double vehicle_vy = vehicle[4];
@@ -269,41 +270,67 @@ int main() {
 
               vehicle_s += ((double)prev_size*.02*vehicle_speed);
 
+              vehicle_trajectory.push_back(vehicle_s);
+
               // add vehicles in close proximity to relative lane vectors
-              if((vehicle_s > car_s - 35) && ((vehicle_s - car_s) < 45)) {
+              if((vehicle_s > car_s + 10) && (vehicle_s < car_s + 40)) {
                 // check if vehicle is in current land and ahead of our car
                 if((vehicle_s > car_s) && (vehicle_d < (2+4*lane+2)) && (vehicle_d > (2+4*lane-2))) {
-                  lane_current.push_back(vehicle);
+                  lane_current.push_back(vehicle_trajectory);
                 // check if vehicle is near our car in neighboring lanes
-                } else if((vehicle_s - car_s) < 20) {
+                } else if(vehicle_s < car_s + 40) {
                   if (vehicle_d < (2+4*(lane-1)+2) && vehicle_d > (2+4*(lane-1)-2)) {
-                    lane_left.push_back(vehicle);
+                    lane_left.push_back(vehicle_trajectory);
                   } else if (vehicle_d < (2+4*(lane+1)+2) && vehicle_d > (2+4*(lane+1)-2)){
-                    lane_right.push_back(vehicle);
+                    lane_right.push_back(vehicle_trajectory);
                   }
                 }
               }
+            }
 
+            // if car is in transition to target lane don't make adjustments
+            if(car_d > (4*lane + 1.5) && car_d < (4*lane + 2.5)){
+              // check if forward progress is impeded
               if(lane_current.size() > 0) {
                 accelerate = false;
                 car_state = 1;
-                // cout << "car in path!! speed is " << vehicle_speed;
+                cout << "\n# changing lanes ";
 
+                // move into whatever land has room
                 if(lane > 0 && lane_left.size() == 0) {
                   lane -= 1;
+                  car_state = 2;
                 } else if(lane < 2 && lane_right.size() == 0) {
                   lane += 1;
+                  car_state = 3;
                 }
               }
-
+            } else {
+              car_state = 2;
+              cout << "\n# changing lanes (in progress) ";
             }
 
-            cout << "\nlane_left size: " << lane_left.size();
-            cout << "\nlane_right size: " << lane_right.size();
-            cout << "\nlane_current size: " << lane_current.size();
+            cout << "\n\nlane: " << lane;
+            cout << "\nstate: " << car_state;
+            cout << "\nd: " << car_d;
 
-            double target_vel = ((accelerate) ? 47.5 : 29.5);
+            cout << "\nlane l [" << lane_left.size() << "]: ";
+            for(int i = 0; i < lane_left.size(); i++) {
+              cout << lane_left[i][0] - car_s << " ";
+            }
 
+            cout << "\nlane c [" << lane_current.size() << "]: ";
+            for(int i = 0; i < lane_current.size(); i++) {
+              cout << lane_current[i][0] - car_s << " ";
+            }
+
+            cout << "\nlane r[" << lane_right.size() << "]: ";
+            for(int i = 0; i < lane_right.size(); i++) {
+               cout << lane_right[i][0] - car_s << " ";
+            }
+
+
+            double target_vel = ((car_state == 0) ? 45.5 : 29.5);
 
             if(car_speed < target_vel) {
               ref_vel += .225;
@@ -330,11 +357,6 @@ int main() {
           	std::cout << "\ncar_yaw" << car_yaw;
           	std::cout << "\ncar_speed" << car_speed;
 
-            std::cout << "\ncurrent speed" << car_speed;
-            std::cout << "\ntarget speed" << ((50 * dist_inc)*60*60)/1609.34;
-
-            // std::cout << "\nsensor_fusion" << sensor_fusion;
-            std::cout << "\ntarget speed" << ((50 * dist_inc)*60*60)/1609.34;
             */
 
             // std::cout << "\ncar_location [" << car_x << ", " << car_y << "]";
@@ -383,9 +405,9 @@ int main() {
 
             // std::cout << "\ndebug: 2";
 
-            vector<double> next_wp0 = getXY(car_s+30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-            vector<double> next_wp1 = getXY(car_s+60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-            vector<double> next_wp2 = getXY(car_s+90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp0 = getXY(car_s+50, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp1 = getXY(car_s+100, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp2 = getXY(car_s+150, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
             ptsx.push_back(next_wp0[0]);
             ptsx.push_back(next_wp1[0]);
@@ -426,7 +448,7 @@ int main() {
             }
 
             // calc how to break up split points so we travel at desired velocity
-            double target_x = 30.0;
+            double target_x = 50.0;
             double target_y = s(target_x);
             double target_dist = sqrt((target_x)*(target_x)+(target_y)*(target_y));
 
