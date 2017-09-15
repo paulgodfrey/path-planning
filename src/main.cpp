@@ -296,7 +296,7 @@ int main() {
                 car_state = 1;
                 cout << "\n# changing lanes ";
 
-                // move into whatever land has room
+                // move into whatever lane has room
                 if(lane > 0 && lane_left.size() == 0) {
                   lane -= 1;
                   car_state = 2;
@@ -330,36 +330,17 @@ int main() {
             }
 
 
-            double target_vel = ((car_state == 0) ? 45.5 : 29.5);
+            double target_vel = ((car_state != 1) ? 44.5 : 29.5);
 
             if(car_speed < target_vel) {
-              ref_vel += .225;
+              ref_vel += .18;
             } else {
-              ref_vel -= .225;
+              if(car_state == 0) { // soften velocity changes if in lane keep mode
+                ref_vel -= .05;
+              } else {
+                ref_vel -= .25;
+              }
             }
-
-          	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-            double dist_inc = 0.3;
-
-            // Acceleration is calculated by comparing the rate of change of average speed over .2 second intervals
-
-            // The jerk is calculated as the average acceleration over 1 second intervals. In order for the passenger to have an enjoyable ride both the jerk and the total acceleration should not exceed 10.
-
-            // The simulator runs a cycle every 20 ms (50 frames per second), but your C++ path planning program will provide new a new path at least one 20 ms cycle behind
-
-            // std::cout << "\ndebug: 1";
-
-            /*
-            std::cout << "\ncar_x" << car_x;
-          	std::cout << "\ncar_y" << car_y;
-          	std::cout << "\ncar_s" << car_s;
-          	std::cout << "\ncar_d" << car_d;
-          	std::cout << "\ncar_yaw" << car_yaw;
-          	std::cout << "\ncar_speed" << car_speed;
-
-            */
-
-            // std::cout << "\ncar_location [" << car_x << ", " << car_y << "]";
 
             vector<double> ptsx;
             vector<double> ptsy;
@@ -368,22 +349,15 @@ int main() {
             double ref_y = car_y;
             double ref_yaw = deg2rad(car_yaw);
 
-            // std::cout << "\ndebug: 1.2" << "\nprevious size: " << prev_size;
-
             if(prev_size < 2) {
               // make path tangent to car
-              // std::cout << "\ndebug: 1.3 create from exising loc";
               double prev_car_x = car_x - cos(car_yaw);
               double prev_car_y = car_y - sin(car_yaw);
 
-              //ptsx.push_back(prev_car_x);
               ptsx.push_back(car_x);
-
-              //ptsy.push_back(prev_car_y);
               ptsy.push_back(car_y);
             } else {
               // redefine ref state as previous end point
-              // std::cout << "\ndebug: 1.3 use end of previous path as starting point";
               ref_x = previous_path_x[prev_size-1];
               ref_y = previous_path_y[prev_size-1];
 
@@ -397,13 +371,7 @@ int main() {
 
               ptsy.push_back(ref_y_prev);
               ptsy.push_back(ref_y);
-
             }
-
-            // cout << "\npath [" << ptsx[0] << ", " << ptsy[0] << "]";
-            // cout << "\npath [" << ptsx[1] << ", " << ptsy[1] << "]";
-
-            // std::cout << "\ndebug: 2";
 
             vector<double> next_wp0 = getXY(car_s+50, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
             vector<double> next_wp1 = getXY(car_s+100, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -424,18 +392,12 @@ int main() {
 
               ptsx[i] = (shift_x * cos(0-ref_yaw) - shift_y * sin(0-ref_yaw));
               ptsy[i] = (shift_x * sin(0-ref_yaw) + shift_y * cos(0-ref_yaw));
-              // cout << "\npath [" << ptsx[i] << ", " << ptsy[i] << "]";
             }
-
-            // std::cout << "\ndebug: 3";
 
             tk::spline s;
 
-            // std::cout << "\ndebug: 3.3";
             // set (x,y) points to the spline
             s.set_points(ptsx, ptsy);
-
-            // std::cout << "\ndebug: 3.5";
 
             // define (x,y) points we'll use with planner
             vector<double> next_x_vals;
@@ -454,11 +416,8 @@ int main() {
 
             double x_add_on = 0;
 
-            // std::cout << "\ndebug: 4";
-
             // fill up the rest of our path planner after filling with previous points
             // here we'll always fill it up to 50 points
-
             for(int i = 1; i <= 50 - previous_path_x.size(); i++) {
               double N = (target_dist/(.02*ref_vel/2.24)); //2.24 is for mph to m/s coversion
               double x_point = x_add_on + (target_x) / N;
@@ -485,11 +444,8 @@ int main() {
             msgJson["next_x"] = next_x_vals;
             msgJson["next_y"] = next_y_vals;
 
-            // std::cout << "\ndebug: 5";
-
             auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
-            //this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
 
         }
