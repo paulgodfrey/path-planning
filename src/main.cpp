@@ -295,22 +295,8 @@ int main() {
                        || (vehicle_traj_decel - car_s_f < 10)) { // vehicle decelerated trajectory will be next to AV at t+1
                   if (vehicle_d < (2+4*(lane-1)+2) && vehicle_d > (2+4*(lane-1)-2)) {
                     lane_left.push_back(vehicle_trajectory);
-                    /*
-                    cout << "\n\nv [" << i << "] lane: " << "left";
-                    cout << "\nv [" << i << "] traj_accel_d: " << vehicle_traj_accel - car_s_f;
-                    cout << "\nv [" << i << "] traj_decel_d: " << vehicle_traj_decel - car_s_f;
-                    cout << "\nv [" << i << "] traj_d: " << vehicle_s_f - car_s_f;
-                    cout << "\nv [" << i << "] s_d: " << vehicle_s - car_s;
-                    */
                   } else if (vehicle_d < (2+4*(lane+1)+2) && vehicle_d > (2+4*(lane+1)-2)){
                     lane_right.push_back(vehicle_trajectory);
-                    /*
-                    cout << "\n\nv [" << i << "] lane: " << "right";
-                    cout << "\nv [" << i << "] traj_accel_d: " << vehicle_traj_accel - car_s_f;
-                    cout << "\nv [" << i << "] traj_decel_d: " << vehicle_traj_decel - car_s_f;
-                    cout << "\nv [" << i << "] traj_d: " << vehicle_s_f - car_s_f;
-                    cout << "\nv [" << i << "] s_d: " << vehicle_s - car_s;
-                    */
                   }
                 }
               }
@@ -375,17 +361,17 @@ int main() {
             }
 
 
-            double target_vel = ((car_state != 1) ? 46.5 : 29.5);
+            double target_vel = ((car_state != 1) ? 46.0 : 29.5);
 
-            if(car_speed < target_vel) {
+            if((car_speed < target_vel) && (car_state != 1)) {
               ref_vel += .18;
             } else {
               if(car_state == 0) { // soften velocity changes if in lane keep mode
                 ref_vel -= .05;
               } else if(car_state == 1){ // deceleration for approaching a vehicle in curr lane
-                ref_vel -= .25;
-              } else if(car_state == 2){ // slowly reduce velocity in a lane change to prevet jerk
-                // ref_vel -= .05;
+                ref_vel -= .3;
+              } else if(car_state == 2 && lane_current.size() > 0) {
+                ref_vel -= .2;
               }
             }
 
@@ -420,9 +406,9 @@ int main() {
               ptsy.push_back(ref_y);
             }
 
-            vector<double> next_wp0 = getXY(car_s+50, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-            vector<double> next_wp1 = getXY(car_s+100, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-            vector<double> next_wp2 = getXY(car_s+150, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp0 = getXY(car_s+45, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp1 = getXY(car_s+90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            vector<double> next_wp2 = getXY(car_s+135, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
             ptsx.push_back(next_wp0[0]);
             ptsx.push_back(next_wp1[0]);
@@ -457,7 +443,7 @@ int main() {
             }
 
             // calc how to break up split points so we travel at desired velocity
-            double target_x = 50.0;
+            double target_x = 40.0;
             double target_y = s(target_x);
             double target_dist = sqrt((target_x)*(target_x)+(target_y)*(target_y));
 

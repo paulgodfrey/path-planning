@@ -1,6 +1,31 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
-   
+
+### Project summary
+Path planning is one of the hardest problem in autonomous vehicles (AV) and the complexity of it made deciding which parts to tackle first a little tricky. The highway simulator provides two primary data feeds: a processed sensor fusion feed that contains the cartesian / fernete coordinates for other vehicles on the road and localization data for our own car. I decided to go with basic lane keeping as a starting point and began working on path planning for a single lane around the track (ignoring other vehicles and not attempting lane changes).
+
+Controlling the AV in the highway simulator is done by sending a path (an array of cartesian coordinates) to the simulators version of the CAN Bus. The vehicle's speed and acceleration are derived from the distances between each point so the coordinates must be generated to avoid jerk and follow the speed limit.
+
+While the simulator takes Cartesian coordinates it's a lot simpler to do a lot of the planning work in fernete coordinates and then transform them after. Let's say we have a target lane we want to keep and we store that in a variable lane with values 0-2 (for the 3 lanes on our side of a 6 lane highway). If each lane is 4 meters then we can get the D coordinate for the center of the target lane by doing 2+lane*4.
+
+Now we need to pick a few S coordinates (starting at current S) to use for fitting a spline to the planned path. In order to spread lane change maneuvers out smoothly (and avoid jerk) I chose to use 3 S coordinates at 45 point increments from the cars current (S+45, S+90, S+135). Now that we have 3 sets of fernete coordinates we can convert them back to cartesian coordinates before fitting our spline.
+
+While we could've fit a polynomial to the points I decided to use a spline tool as it made the task simpler and unlike polynomials the spline is guaranteed to go directly through our target coordinates. Because acceleration is derived from the distance between path coordinates we then select points along the spline in accordance with our jerk minimization and target velocity goals.
+
+At this point we can plan a path for our AV around the highway track but we’re ignoring all the other cars on the road so we’ll slam into cars in our lane and don't know how to change lanes yet to avoid them. In order to make decisions based on the highway traffic we need to parse the sensor fusion data and calculate the variable trajectories for nearby vehicles. We also need to keep track of our own vehicles intention using a finite state machine with four distinct states: keep lane, prepare lane change, change lanes left, change lanes right.
+
+At each app cycle the sensor fusion data is processed so we can track the location of nearby vehicles. The vehicle data also includes everything we need to know in order to calculate its trajectory at a future state: cartesian coordinates, fernete coordinates, and current x/y velocity in m/s.
+
+When processing the vehicles I first narrow it down to only nearby vehicles by looking at the delta between our AV cars S coordinate and the vehicles S coordinate. I then check if there are any vehicles in our current range within the immediate path for lane keeping, changing into the left lane, or changing into the right lane.
+
+If there's no vehicles in our current lane that's great, don't make any lane changes and stay close to the target trajectory (< 50 mph). If there is a vehicle in our current path we decrease the reference velocity sequentially (-.3 m/s per planning cycle) so as to avoid jerk but keep a safe distance. Avoiding a front collision and keeping a safe space between you in the lead car is paramount (whoever wrote the vehicle AI made them do brake checks too :D).
+
+If we are stuck behind a car that's slowing us down below the target trajectory we then need to try to safely change lanes. To change lanes we'll need a big enough gap between other cars so that we can make the move without creating jerk. Because we're recycling any unexecuted path points from the previous cycle a future lane change will be executed starting at the end of the recycled path. That means in order to make sure we have enough room to make the lane change we have to calculate the trajectory of other vehicles at our own vehicles future state. Additionally we need to make sure we can account for a sudden acceleration or deceleration from those cars that might close the gap and cause a collision. To handle these cases I calculated the variable trajectories for each car at +3 m/s and -3 m/s from their current speed. 
+
+But what if we’re in the center lane and have the option to change lanes in both directions, how do we decide which way to go? In this scenario we look ahead beyond the trajectory window needed for the lane change and search for the closest cars S coordinate in both lanes. Whichever lane has the furthest distance to the next car will offer us the best chance to maintain our target velocity and a higher likelihood of maneuverability if we need make a subsequent lane change.
+
+There's a lot of opportunities to improve on this approach to path planning but I felt like this solution was the best practical fit for accomplishing the rubric and keeping it simple. The areas I'd like to spend some more time on in the future are more complex lane change trajectories incorporating accel / decel to fit in tight windows. Additionally developing cost functions for the finite state machine to make decisions rather than hard coding decision trees would make a more flexible path planning system.
+
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases).
 
@@ -38,13 +63,13 @@ Here is the data provided from the Simulator to the C++ Program
 #### Previous path data given to the Planner
 
 //Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time. 
+the path has processed since last time.
 
 ["previous_path_x"] The previous list of x points previously given to the simulator
 
 ["previous_path_y"] The previous list of y points previously given to the simulator
 
-#### Previous path's end s and d values 
+#### Previous path's end s and d values
 
 ["end_path_s"] The previous list's last point's frenet s value
 
@@ -52,7 +77,7 @@ the path has processed since last time.
 
 #### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
 
-["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates. 
+["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates.
 
 ## Details
 
@@ -82,7 +107,7 @@ A really helpful resource for doing this project and creating smooth trajectorie
   * Run either `install-mac.sh` or `install-ubuntu.sh`.
   * If you install from source, checkout to commit `e94b6e1`, i.e.
     ```
-    git clone https://github.com/uWebSockets/uWebSockets 
+    git clone https://github.com/uWebSockets/uWebSockets
     cd uWebSockets
     git checkout e94b6e1
     ```
@@ -137,4 +162,3 @@ still be compilable with cmake and make./
 
 ## How to write a README
 A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
-
