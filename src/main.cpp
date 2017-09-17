@@ -203,9 +203,11 @@ int main() {
 
   // current lane [0,1,2] as [left,center,right]
   int lane = 1;
+  int car_state = 0;
   double ref_vel = 0.0;
 
-  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+
+  h.onMessage([&ref_vel,&car_state,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -252,9 +254,6 @@ int main() {
             double car_s_delta = car_s_f - car_s;
 
             bool accelerate = true;
-
-            // car state [ 0 = keep lane, 1 = prepare lane shift, 2 = lane shift left, 3 = lane shift right]
-            int car_state = 0;
 
             vector<vector<double>> lane_left;
             vector<vector<double>> lane_right;
@@ -321,13 +320,12 @@ int main() {
             }
 
             // if car is in transition to target lane don't make adjustments
-            if(car_d > (4*lane + 1.5) && car_d < (4*lane + 2.5)){
+            if(car_state <= 2){
               // check if forward progress is impeded
               if(lane_current.size() > 0) {
-                accelerate = false;
                 car_state = 1;
-                cout << "\n# changing lanes ";
-                
+                cout << "\n# preparing for lane change ";
+
                 // if we can change lanes in both directions find lane with the longest distance to next car
                 if(lane == 1 && lane_left.size() == 0 && lane_right.size() == 0) {
                   lane = (lane_nearest_s[0] > lane_nearest_s[2]) ? lane - 1 : lane + 1;
@@ -338,9 +336,10 @@ int main() {
                   lane += 1;
                   car_state = 3;
                 }
+              } else if(car_d > (4*lane + 1.5) && car_d < (4*lane + 2.5)) { // check to see if car has completed lane change
+                car_state = 0;
               }
             } else {
-              car_state = 2;
               cout << "\n# changing lanes (in progress) ";
             }
 
@@ -390,8 +389,8 @@ int main() {
                 ref_vel -= .05;
               } else if(car_state == 1){ // deceleration for approaching a vehicle in curr lane
                 ref_vel -= .3;
-              } else if(car_state == 2 && lane_current.size() > 0) {
-                ref_vel -= .2;
+              } else if(car_state >= 2 && lane_current.size() > 0) { // deceleration during a lane change if target lane has a car in immediate path (<= car_s_f)
+                ref_vel -= .35;
               }
             }
 
