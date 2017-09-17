@@ -260,6 +260,10 @@ int main() {
             vector<vector<double>> lane_right;
             vector<vector<double>> lane_current;
 
+            double nearest_init = car_s + 1000.0;
+            // array for tracking next nearest car after lane change
+            double lane_nearest_s[] = { nearest_init, nearest_init, nearest_init };
+
             // sort vehicles into lanes and calculate location at next time step
             for(int i = 0; i < sensor_fusion.size(); i++) {
               auto vehicle = sensor_fusion[i];
@@ -279,6 +283,16 @@ int main() {
               double vehicle_traj_decel = vehicle_s + ((double)prev_size*.02*(vehicle_speed-vehicle_speed_mod));
               double vehicle_s_d = vehicle_s - car_s;
 
+              int vehicle_lane;
+
+              if(vehicle_d < 4) {
+                vehicle_lane = 0;
+              } else if(vehicle_d < 8) {
+                vehicle_lane = 1;
+              } else {
+                vehicle_lane = 2;
+              }
+
               vehicle_trajectory.push_back(vehicle_s);
               vehicle_trajectory.push_back(vehicle_traj_decel);
               vehicle_trajectory.push_back(vehicle_s_f);
@@ -287,18 +301,22 @@ int main() {
               // add vehicles in close proximity to relative lane vectors
               if (vehicle_s_d > -5 && vehicle_s_d < 25) {
                 // check if vehicle is in current lane and ahead of our car
-                if((vehicle_s_f > car_s && vehicle_traj_decel - car_s_f < car_s_delta) && (vehicle_d < (2+4*lane+2)) && (vehicle_d > (2+4*lane-2))) {
+                if((vehicle_s_f > car_s && vehicle_traj_decel - car_s_f < car_s_delta) && (lane == vehicle_lane)) {
                   lane_current.push_back(vehicle_trajectory);
                 // check if vehicle is near our car in neighboring lanes
                 } else if((vehicle_s > car_s - 5 && vehicle_s < car_s + 20) // vehicle next to AV at current t
                        || (vehicle_traj_accel - car_s_f > -10) // vehicle accelerated trajectory will be next to AV at t+1
                        || (vehicle_traj_decel - car_s_f < 10)) { // vehicle decelerated trajectory will be next to AV at t+1
-                  if (vehicle_d < (2+4*(lane-1)+2) && vehicle_d > (2+4*(lane-1)-2)) {
+                  if (vehicle_lane == lane - 1) {
                     lane_left.push_back(vehicle_trajectory);
-                  } else if (vehicle_d < (2+4*(lane+1)+2) && vehicle_d > (2+4*(lane+1)-2)){
+                  } else if (vehicle_lane == lane + 1){
                     lane_right.push_back(vehicle_trajectory);
                   }
                 }
+              }
+
+              if(vehicle_s > car_s && vehicle_s < lane_nearest_s[vehicle_lane]) {
+                lane_nearest_s[vehicle_lane] = vehicle_s;
               }
             }
 
@@ -309,12 +327,14 @@ int main() {
                 accelerate = false;
                 car_state = 1;
                 cout << "\n# changing lanes ";
-
-                // move into whatever lane has room
-                if(lane > 0 && lane_left.size() == 0) {
+                
+                // if we can change lanes in both directions find lane with the longest distance to next car
+                if(lane == 1 && lane_left.size() == 0 && lane_right.size() == 0) {
+                  lane = (lane_nearest_s[0] > lane_nearest_s[2]) ? lane - 1 : lane + 1;
+                } else if(lane > 0 && lane_left.size() == 0) { // change lanes left
                   lane -= 1;
                   car_state = 2;
-                } else if(lane < 2 && lane_right.size() == 0) {
+                } else if(lane < 2 && lane_right.size() == 0) { // change lanes right
                   lane += 1;
                   car_state = 3;
                 }
