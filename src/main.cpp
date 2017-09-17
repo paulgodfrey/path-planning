@@ -247,6 +247,10 @@ int main() {
             // length of previous path
             int prev_size = previous_path_x.size();
 
+            // cars s at end of current planned trajectory
+            double car_s_f = car_s + ((double)prev_size*.02*(car_speed/2.24));
+            double car_s_delta = car_s_f - car_s;
+
             bool accelerate = true;
 
             // car state [ 0 = keep lane, 1 = prepare lane shift, 2 = lane shift left, 3 = lane shift right]
@@ -256,8 +260,8 @@ int main() {
             vector<vector<double>> lane_right;
             vector<vector<double>> lane_current;
 
+            // sort vehicles into lanes and calculate location at next time step
             for(int i = 0; i < sensor_fusion.size(); i++) {
-              // cout << sensor_fusion[i];
               auto vehicle = sensor_fusion[i];
               vector<double> vehicle_trajectory;
 
@@ -268,21 +272,45 @@ int main() {
 
               double vehicle_speed = sqrt(vehicle_vx*vehicle_vx+vehicle_vy*vehicle_vy);
 
-              vehicle_s += ((double)prev_size*.02*vehicle_speed);
+              // calculate vehicles future position at end of AV cars current trajetory
+              double vehicle_s_f = vehicle_s + ((double)prev_size*.02*vehicle_speed);
+              double vehicle_speed_mod = 3.0;
+              double vehicle_traj_accel = vehicle_s + ((double)prev_size*.02*(vehicle_speed+vehicle_speed_mod));
+              double vehicle_traj_decel = vehicle_s + ((double)prev_size*.02*(vehicle_speed-vehicle_speed_mod));
+              double vehicle_s_d = vehicle_s - car_s;
 
               vehicle_trajectory.push_back(vehicle_s);
+              vehicle_trajectory.push_back(vehicle_traj_decel);
+              vehicle_trajectory.push_back(vehicle_s_f);
+              vehicle_trajectory.push_back(vehicle_traj_accel);
 
               // add vehicles in close proximity to relative lane vectors
-              if((vehicle_s > car_s + 10) && (vehicle_s < car_s + 40)) {
-                // check if vehicle is in current land and ahead of our car
-                if((vehicle_s > car_s) && (vehicle_d < (2+4*lane+2)) && (vehicle_d > (2+4*lane-2))) {
+              if (vehicle_s_d > -5 && vehicle_s_d < 25) {
+                // check if vehicle is in current lane and ahead of our car
+                if((vehicle_s_f > car_s && vehicle_traj_decel - car_s_f < car_s_delta) && (vehicle_d < (2+4*lane+2)) && (vehicle_d > (2+4*lane-2))) {
                   lane_current.push_back(vehicle_trajectory);
                 // check if vehicle is near our car in neighboring lanes
-                } else if(vehicle_s < car_s + 40) {
+                } else if((vehicle_s > car_s - 5 && vehicle_s < car_s + 20) // vehicle next to AV at current t
+                       || (vehicle_traj_accel - car_s_f > -10) // vehicle accelerated trajectory will be next to AV at t+1
+                       || (vehicle_traj_decel - car_s_f < 10)) { // vehicle decelerated trajectory will be next to AV at t+1
                   if (vehicle_d < (2+4*(lane-1)+2) && vehicle_d > (2+4*(lane-1)-2)) {
                     lane_left.push_back(vehicle_trajectory);
+                    /*
+                    cout << "\n\nv [" << i << "] lane: " << "left";
+                    cout << "\nv [" << i << "] traj_accel_d: " << vehicle_traj_accel - car_s_f;
+                    cout << "\nv [" << i << "] traj_decel_d: " << vehicle_traj_decel - car_s_f;
+                    cout << "\nv [" << i << "] traj_d: " << vehicle_s_f - car_s_f;
+                    cout << "\nv [" << i << "] s_d: " << vehicle_s - car_s;
+                    */
                   } else if (vehicle_d < (2+4*(lane+1)+2) && vehicle_d > (2+4*(lane+1)-2)){
                     lane_right.push_back(vehicle_trajectory);
+                    /*
+                    cout << "\n\nv [" << i << "] lane: " << "right";
+                    cout << "\nv [" << i << "] traj_accel_d: " << vehicle_traj_accel - car_s_f;
+                    cout << "\nv [" << i << "] traj_decel_d: " << vehicle_traj_decel - car_s_f;
+                    cout << "\nv [" << i << "] traj_d: " << vehicle_s_f - car_s_f;
+                    cout << "\nv [" << i << "] s_d: " << vehicle_s - car_s;
+                    */
                   }
                 }
               }
@@ -310,35 +338,54 @@ int main() {
               cout << "\n# changing lanes (in progress) ";
             }
 
-            cout << "\n\nlane: " << lane;
-            cout << "\nstate: " << car_state;
-            cout << "\nd: " << car_d;
+            cout << "\n\ncar_speed: " << car_speed;
+            cout << "\ncar_s_delta: " << car_s_delta;
+            cout << "\ncar_s_f: " << car_s_f;
+
+            double base_s;
 
             cout << "\nlane l [" << lane_left.size() << "]: ";
             for(int i = 0; i < lane_left.size(); i++) {
-              cout << lane_left[i][0] - car_s << " ";
+              cout << "\n";
+              for(int j = 0; j < lane_left[i].size(); j++) {
+                base_s = ((j == 0) ? car_s : car_s_f);
+                cout << lane_left[i][j] - base_s << " ";
+                if(j == 0) { cout << "— "; }
+              }
             }
 
             cout << "\nlane c [" << lane_current.size() << "]: ";
             for(int i = 0; i < lane_current.size(); i++) {
-              cout << lane_current[i][0] - car_s << " ";
+              cout << "\n";
+              for(int j = 0; j < lane_current[i].size(); j++) {
+                base_s = ((j == 0) ? car_s : car_s_f);
+                cout << lane_current[i][j] - car_s << " ";
+                if(j == 0) { cout << "— "; }
+              }
             }
 
             cout << "\nlane r[" << lane_right.size() << "]: ";
             for(int i = 0; i < lane_right.size(); i++) {
-               cout << lane_right[i][0] - car_s << " ";
+              cout << "\n";
+              for(int j = 0; j < lane_right[i].size(); j++) {
+                base_s = ((j == 0) ? car_s : car_s_f);
+                cout << lane_right[i][j] - car_s << " ";
+                if(j == 0) { cout << "— "; }
+              }
             }
 
 
-            double target_vel = ((car_state != 1) ? 44.5 : 29.5);
+            double target_vel = ((car_state != 1) ? 46.5 : 29.5);
 
             if(car_speed < target_vel) {
               ref_vel += .18;
             } else {
               if(car_state == 0) { // soften velocity changes if in lane keep mode
                 ref_vel -= .05;
-              } else {
+              } else if(car_state == 1){ // deceleration for approaching a vehicle in curr lane
                 ref_vel -= .25;
+              } else if(car_state == 2){ // slowly reduce velocity in a lane change to prevet jerk
+                // ref_vel -= .05;
               }
             }
 
