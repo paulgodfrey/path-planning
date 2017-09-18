@@ -331,7 +331,13 @@ int main() {
 
                 // if we can change lanes in both directions find lane with the longest distance to next car
                 if(lane == 1 && lane_left.size() == 0 && lane_right.size() == 0) {
-                  lane = (lane_nearest_s[0] > lane_nearest_s[2]) ? lane - 1 : lane + 1;
+                  if(lane_nearest_s[0] > lane_nearest_s[2]){
+                    lane -= 1;
+                    car_state = 2;
+                  } else {
+                    lane += 1;
+                    car_state = 3;
+                  }
                 } else if(lane > 0 && lane_left.size() == 0) { // change lanes left
                   lane -= 1;
                   car_state = 2;
