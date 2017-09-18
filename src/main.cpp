@@ -259,9 +259,8 @@ int main() {
             vector<vector<double>> lane_right;
             vector<vector<double>> lane_current;
 
-            double nearest_init = car_s + 150.0;
             // array for tracking next nearest car after lane change
-            double lane_nearest_s[] = { nearest_init, nearest_init, nearest_init };
+            double lane_nearest_s[] = { 100.0, 100.0, 100.0 };
 
             // sort vehicles into lanes and calculate location at next time step
             for(int i = 0; i < sensor_fusion.size(); i++) {
@@ -300,7 +299,7 @@ int main() {
               // add vehicles in close proximity to relative lane vectors
               if (vehicle_s_d > -5 && vehicle_s_d < 25) {
                 // check if vehicle is in current lane and ahead of our car
-                if((vehicle_s_f > car_s && vehicle_traj_decel - car_s_f < (car_s_delta*1.2)) && (lane == vehicle_lane)) {
+                if((vehicle_s_f > car_s && vehicle_traj_decel - car_s_f < (car_s_delta*1.25)) && (lane == vehicle_lane)) {
                   lane_current.push_back(vehicle_trajectory);
                 // check if vehicle is near our car in neighboring lanes
                 } else if((vehicle_s > car_s - 5 && vehicle_s < car_s + 20) // vehicle next to AV at current t
@@ -314,8 +313,8 @@ int main() {
                 }
               }
 
-              if(vehicle_s > car_s && vehicle_s < lane_nearest_s[vehicle_lane]) {
-                lane_nearest_s[vehicle_lane] = vehicle_s;
+              if(vehicle_s > car_s && (vehicle_s - car_s < lane_nearest_s[vehicle_lane])) {
+                lane_nearest_s[vehicle_lane] = vehicle_s - car_s;
               }
             }
 
@@ -401,7 +400,7 @@ int main() {
               if(car_state == 0) { // soften velocity changes if in lane keep mode
                 ref_vel -= .01;
               } else if(car_state == 1){ // deceleration for approaching a vehicle in curr lane
-                ref_vel -= .3;
+                ref_vel -= .315;
               } else if(car_state >= 2 && car_state_prev >= 2 && lane_current.size() > 0) { // deceleration during a lane change if target lane has a car in immediate path (<= car_s_f)
                 ref_vel -= .3;
                 cout << "decelarting in lane change";
