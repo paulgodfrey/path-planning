@@ -259,7 +259,7 @@ int main() {
             vector<vector<double>> lane_right;
             vector<vector<double>> lane_current;
 
-            double nearest_init = car_s + 1000.0;
+            double nearest_init = car_s + 150.0;
             // array for tracking next nearest car after lane change
             double lane_nearest_s[] = { nearest_init, nearest_init, nearest_init };
 
@@ -331,7 +331,8 @@ int main() {
 
                 // if we can change lanes in both directions find lane with the longest distance to next car
                 if(lane == 1 && lane_left.size() == 0 && lane_right.size() == 0) {
-                  if(lane_nearest_s[0] > lane_nearest_s[2]){
+                  // if lane change left has further s or both are equal (bias towards far left "fast lane")
+                  if(lane_nearest_s[0] > lane_nearest_s[2] || lane_nearest_s[0] == lane_nearest_s[2]){
                     lane -= 1;
                     car_state = 2;
                   } else {
@@ -387,14 +388,14 @@ int main() {
             }
 
 
-            double target_vel = 46.0;
+            double target_vel = 48.0;
 
             if((car_speed < target_vel) && (car_state != 1)) {
               // if we're close to target speed lower rate of acceleration
               if(target_vel - car_speed < 4) {
                 ref_vel += .10;
               } else {
-                ref_vel += .2;
+                ref_vel += .21;
               }
             } else {
               if(car_state == 0) { // soften velocity changes if in lane keep mode
@@ -410,6 +411,7 @@ int main() {
             cout << "\n\ncar_speed: " << car_speed;
             cout << "\ncar_ref_vel: " << ref_vel;
             cout << "\ncar_state: " << car_state;
+            cout << "\nnearest_s: " << lane_nearest_s[0] << " " << lane_nearest_s[2]<< endl;
 
             vector<double> ptsx;
             vector<double> ptsy;
