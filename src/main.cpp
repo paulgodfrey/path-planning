@@ -300,12 +300,12 @@ int main() {
               // add vehicles in close proximity to relative lane vectors
               if (vehicle_s_d > -5 && vehicle_s_d < 25) {
                 // check if vehicle is in current lane and ahead of our car
-                if((vehicle_s_f > car_s && vehicle_traj_decel - car_s_f < (car_s_delta + 10)) && (lane == vehicle_lane)) {
+                if((vehicle_s_f > car_s && vehicle_traj_decel - car_s_f < (car_s_delta*1.2)) && (lane == vehicle_lane)) {
                   lane_current.push_back(vehicle_trajectory);
                 // check if vehicle is near our car in neighboring lanes
                 } else if((vehicle_s > car_s - 5 && vehicle_s < car_s + 20) // vehicle next to AV at current t
                        || (vehicle_traj_accel - car_s_f > -10) // vehicle accelerated trajectory will be next to AV at t+1
-                       || (vehicle_traj_decel - car_s_f < 10)) { // vehicle decelerated trajectory will be next to AV at t+1
+                       || (vehicle_traj_decel - car_s_f < 15)) { // vehicle decelerated trajectory will be next to AV at t+1
                   if (vehicle_lane == lane - 1) {
                     lane_left.push_back(vehicle_trajectory);
                   } else if (vehicle_lane == lane + 1){
@@ -320,7 +320,8 @@ int main() {
             }
 
             bool car_in_target_lane = (car_d > (4*lane + 1.5) && car_d < (4*lane + 2.5));
-            
+            int car_state_prev = car_state;
+
             // if car is in transition to target lane don't make adjustments
             if(car_state < 2){
               // check if forward progress is impeded
@@ -346,9 +347,6 @@ int main() {
             } else {
               cout << "\n# changing lanes (in progress) ";
             }
-
-            cout << "\n\ncar_speed: " << car_speed;
-            cout << "\ncar_state: " << car_state;
 
             double base_s;
 
@@ -383,19 +381,29 @@ int main() {
             }
 
 
-            double target_vel = ((car_state != 1) ? 46.0 : 29.5);
+            double target_vel = 46.0;
 
             if((car_speed < target_vel) && (car_state != 1)) {
-              ref_vel += .18;
+              // if we're close to target speed lower rate of acceleration
+              if(target_vel - car_speed < 4) {
+                ref_vel += .10;
+              } else {
+                ref_vel += .2;
+              }
             } else {
               if(car_state == 0) { // soften velocity changes if in lane keep mode
-                ref_vel -= .05;
+                ref_vel -= .01;
               } else if(car_state == 1){ // deceleration for approaching a vehicle in curr lane
                 ref_vel -= .3;
-              } else if(car_state >= 2 && lane_current.size() > 0) { // deceleration during a lane change if target lane has a car in immediate path (<= car_s_f)
+              } else if(car_state >= 2 && car_state_prev >= 2 && lane_current.size() > 0) { // deceleration during a lane change if target lane has a car in immediate path (<= car_s_f)
                 ref_vel -= .3;
+                cout << "decelarting in lane change";
               }
             }
+
+            cout << "\n\ncar_speed: " << car_speed;
+            cout << "\ncar_ref_vel: " << ref_vel;
+            cout << "\ncar_state: " << car_state;
 
             vector<double> ptsx;
             vector<double> ptsy;
