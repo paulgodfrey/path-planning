@@ -387,7 +387,7 @@ int main() {
             }
 
 
-            double target_vel = 47.5;
+            double target_vel = 47.0;
 
             if((car_speed < target_vel) && (car_state != 1)) {
               // if we're close to target speed lower rate of acceleration
